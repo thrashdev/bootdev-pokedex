@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
+
+	"github.com/thrashdev/bootdev-pokedex/internal/pokecache"
 )
 
 const locationURL = "https://pokeapi.co/api/v2/location-area/"
+const cacheInterval = time.Duration(10 * time.Second)
 
 type Config struct {
 	Previous *string
 	Next     string
+	Cache    pokecache.Cache
 }
 
 type LocationsResponse struct {
@@ -30,7 +35,12 @@ type Location struct {
 }
 
 func NewConfig() *Config {
-	return &Config{Next: locationURL}
+	conf := &Config{
+		Next:     locationURL,
+		Previous: nil,
+		Cache:    pokecache.NewCache(cacheInterval),
+	}
+	return conf
 }
 
 func GetNextLocations(config *Config) ([]Location, error) {
