@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/thrashdev/bootdev-pokedex/internal/pokeapi"
 )
 
-type commandHandler func(*pokeapi.Config) error
+type commandHandler func(*pokeapi.Config, []string) error
 
 type cliCommand struct {
 	name        string
@@ -40,18 +41,31 @@ func handleCommand(cmdInput string, config *pokeapi.Config) error {
 			description: "Moves across the map 20 locations backwards",
 			handler:     commandMapb,
 		},
+		"explore": {
+			name:        "explore",
+			description: "Shows all Pokemon in the selected area",
+			handler:     commandExplore,
+		},
+		"catch": {
+			name:        "catch",
+			description: "Catches a pokemon named by the user",
+			handler:     commandCatch,
+		},
 		"debug": {
 			name:        "debug",
 			description: "Prints the state of the config",
 			handler:     commandDebug,
 		},
 	}
-	command, ok := commands[cmdInput]
+	input := strings.Split(cmdInput, " ")
+	userCmd := input[0]
+	arguments := input[1:]
+	command, ok := commands[userCmd]
 	if !ok {
 		fmt.Printf("Unrecognized command: %s\n", cmdInput)
 		return nil
 	}
-	err := command.handler(config)
+	err := command.handler(config, arguments)
 	if err != nil {
 		log.Printf("Encountered error while executing the command, err: %v\n", err)
 	}
@@ -59,18 +73,18 @@ func handleCommand(cmdInput string, config *pokeapi.Config) error {
 	return nil
 }
 
-func commandHelp(config *pokeapi.Config) error {
+func commandHelp(config *pokeapi.Config, arguments []string) error {
 	fmt.Println("Welcome to the Pokedex:")
 	fmt.Println("Usage")
 	return nil
 }
 
-func commandExit(config *pokeapi.Config) error {
+func commandExit(config *pokeapi.Config, arguments []string) error {
 	os.Exit(0)
 	return nil
 }
 
-func commandMap(config *pokeapi.Config) error {
+func commandMap(config *pokeapi.Config, arguments []string) error {
 	locations, err := pokeapi.GetNextLocations(config)
 	if err != nil {
 		return err
@@ -82,7 +96,7 @@ func commandMap(config *pokeapi.Config) error {
 
 }
 
-func commandMapb(config *pokeapi.Config) error {
+func commandMapb(config *pokeapi.Config, arguments []string) error {
 	locations, err := pokeapi.GetPreviousLocations(config)
 	if err != nil {
 		return err
@@ -94,8 +108,31 @@ func commandMapb(config *pokeapi.Config) error {
 
 }
 
-func commandDebug(config *pokeapi.Config) error {
-	fmt.Println(config)
+func commandExplore(config *pokeapi.Config, arguments []string) error {
+	if len(arguments) == 0 {
+		return fmt.Errorf("Please provide an area to explore")
+	}
+	locName := arguments[0]
+	fmt.Printf("Exploring %s\n", locName)
+	pokemon, err := pokeapi.GetPokemon(config, locName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Found pokemon: ")
+	for _, pok := range pokemon {
+		fmt.Println(pok.Name)
+	}
+	return nil
+}
+
+func commandCatch(config *pokeapi.Config, arguments []string) error {
+
+}
+
+func commandDebug(config *pokeapi.Config, arguments []string) error {
+	fmt.Println("Config: ", config)
+	fmt.Println("Arguments: ", arguments)
 	return nil
 }
 

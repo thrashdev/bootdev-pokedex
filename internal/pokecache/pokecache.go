@@ -40,10 +40,10 @@ func (cache *Cache) reapLoop(ticker *time.Ticker, interval time.Duration) {
 	}
 }
 
-func NewCache(interval time.Duration) Cache {
+func NewCache(interval time.Duration) *Cache {
 	ticker := time.NewTicker(interval)
 	cache := Cache{values: make(map[string]cacheEntry), mu: &sync.RWMutex{}}
 	go cache.reapLoop(ticker, interval)
-	return cache
+	return &cache
 
 }
