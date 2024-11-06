@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -55,6 +56,16 @@ func handleCommand(cmdInput string, config *pokeapi.Config) error {
 			name:        "debug",
 			description: "Prints the state of the config",
 			handler:     commandDebug,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Shows information about a pokemon that the user has caught",
+			handler:     commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "Shows all the pokemon captured by user",
+			handler:     commandPokedex,
 		},
 	}
 	input := strings.Split(cmdInput, " ")
@@ -127,7 +138,64 @@ func commandExplore(config *pokeapi.Config, arguments []string) error {
 }
 
 func commandCatch(config *pokeapi.Config, arguments []string) error {
+	if len(arguments) == 0 {
+		return fmt.Errorf("Please provide a pokemon name")
+	}
+	pokemonName := arguments[0]
+	fmt.Printf("Throwing a pokeball at: %s\n", pokemonName)
 
+	pokemon, err := pokeapi.GetPokemonDetails(config, pokemonName)
+	if err != nil {
+		return err
+	}
+	success := (rand.Intn(2) != 0)
+	if !success {
+		fmt.Printf("%s escaped!\n", pokemonName)
+		return nil
+	}
+	config.Pokedex[pokemonName] = pokemon
+	fmt.Printf("%s was caught!\n", pokemonName)
+
+	return nil
+
+}
+
+func commandInspect(config *pokeapi.Config, arguments []string) error {
+	if len(arguments) == 0 {
+		return fmt.Errorf("Please provide a pokemon name")
+	}
+
+	pokemonName := arguments[0]
+	pokemon, ok := config.Pokedex[pokemonName]
+	if !ok {
+		return fmt.Errorf("You have not caught that pokemon yet")
+	}
+	fmt.Println("Name:", pokemon.Name)
+	fmt.Println("Height:", pokemon.Height)
+	fmt.Println("Weight:", pokemon.Weight)
+	fmt.Println("Stats: ")
+	for _, stat := range pokemon.Stats {
+		fmt.Printf("	-%v: %v\n", stat.Stat.Name, stat.BaseStat)
+	}
+	fmt.Println("Types: ")
+	for _, t := range pokemon.Types {
+		fmt.Printf("	- %v \n", t.Type.Name)
+	}
+	// fmt.Println(pokemon.Moves)
+	// fmt.Println(pokemon.Types)
+	return nil
+
+}
+
+func commandPokedex(config *pokeapi.Config, arguments []string) error {
+	if len(config.Pokedex) == 0 {
+		return fmt.Errorf("No pokemon caught yet\n")
+	}
+	fmt.Println("Your Pokedex:")
+	for k, _ := range config.Pokedex {
+		fmt.Println("	- ", k)
+	}
+	return nil
 }
 
 func commandDebug(config *pokeapi.Config, arguments []string) error {

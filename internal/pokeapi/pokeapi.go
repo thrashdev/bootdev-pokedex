@@ -18,6 +18,7 @@ type Config struct {
 	Previous *string
 	Next     string
 	Cache    *pokecache.Cache
+	Pokedex  map[string]Pokemon
 }
 
 type LocationsResponse struct {
@@ -83,7 +84,7 @@ type LocationDetailsResponse struct {
 	} `json:"pokemon_encounters"`
 }
 
-type PokemonResponse struct {
+type PokemonDetailsResponse struct {
 	ID             int    `json:"id"`
 	Name           string `json:"name"`
 	BaseExperience int    `json:"base_experience"`
@@ -185,8 +186,42 @@ type Location struct {
 }
 
 type Pokemon struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Height int    `json:"height"`
+	Weight int    `json:"weight"`
+	Stats  []struct {
+		BaseStat int `json:"base_stat"`
+		Effort   int `json:"effort"`
+		Stat     struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"stat"`
+	} `json:"stats"`
+	Moves []struct {
+		Move struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"move"`
+		VersionGroupDetails []struct {
+			LevelLearnedAt int `json:"level_learned_at"`
+			VersionGroup   struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			} `json:"version_group"`
+			MoveLearnMethod struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			} `json:"move_learn_method"`
+		} `json:"version_group_details"`
+	} `json:"moves"`
+	Types []struct {
+		Slot int `json:"slot"`
+		Type struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"type"`
+	} `json:"types"`
 }
 
 func NewConfig() *Config {
@@ -194,6 +229,7 @@ func NewConfig() *Config {
 		Next:     locationURL,
 		Previous: nil,
 		Cache:    pokecache.NewCache(cacheInterval),
+		Pokedex:  make(map[string]Pokemon),
 	}
 	return conf
 }
@@ -236,7 +272,7 @@ func (config *Config) getLocations(url string) ([]Location, error) {
 
 }
 
-func (config *Config) getLocationsFromCache(cached []byte) ([]Location, error) {
+func (config *Config) getLocationsCached(cached []byte) ([]Location, error) {
 	locRes := LocationsResponse{}
 	err := json.Unmarshal(cached, &locRes)
 	if err != nil {
@@ -259,11 +295,11 @@ func (config *Config) getLocationsFromCache(cached []byte) ([]Location, error) {
 
 func GetNextLocations(config *Config) ([]Location, error) {
 	cached, ok := config.Cache.Get(config.Next)
-	if !ok {
-		return config.getLocations(config.Next)
+	if ok {
+		fmt.Println("READING FROM CACHE")
+		return config.getLocationsCached(cached)
 	}
-	fmt.Println("READING FROM CACHE")
-	return config.getLocationsFromCache(cached)
+	return config.getLocations(config.Next)
 
 }
 
@@ -272,11 +308,11 @@ func GetPreviousLocations(config *Config) ([]Location, error) {
 		return []Location{}, fmt.Errorf("Can't get previous locations, make a call to next locations first")
 	}
 	cached, ok := config.Cache.Get(*config.Previous)
-	if !ok {
-		return config.getLocations(*config.Previous)
+	if ok {
+		fmt.Println("READING FROM CACHE")
+		return config.getLocationsCached(cached)
 	}
-	fmt.Println("READING FROM CACHE")
-	return config.getLocationsFromCache(cached)
+	return config.getLocations(*config.Previous)
 }
 
 func getPokemon(config *Config, url string) ([]Pokemon, error) {
@@ -301,14 +337,14 @@ func getPokemon(config *Config, url string) ([]Pokemon, error) {
 
 	result := []Pokemon{}
 	for _, item := range locDetails.PokemonEncounters {
-		result = append(result, item.Pokemon)
+		result = append(result, Pokemon{Name: item.Pokemon.Name, URL: item.Pokemon.URL})
 	}
 
 	return result, nil
 
 }
 
-func getPokemonFromCache(cached []byte) ([]Pokemon, error) {
+func getPokemonCached(cached []byte) ([]Pokemon, error) {
 	var locDetails LocationDetailsResponse
 	err := json.Unmarshal(cached, &locDetails)
 	if err != nil {
@@ -317,7 +353,7 @@ func getPokemonFromCache(cached []byte) ([]Pokemon, error) {
 
 	result := []Pokemon{}
 	for _, item := range locDetails.PokemonEncounters {
-		result = append(result, item.Pokemon)
+		result = append(result, Pokemon{Name: item.Pokemon.Name, URL: item.Pokemon.URL})
 	}
 
 	return result, nil
@@ -330,17 +366,58 @@ func GetPokemon(config *Config, locName string) ([]Pokemon, error) {
 	url := locationURL + "/" + locName + "/"
 
 	cached, ok := config.Cache.Get(url)
-	if !ok {
-		return getPokemon(config, url)
+	if ok {
+		fmt.Println("READING FROM CACHE")
+		return getPokemonCached(cached)
 	}
-	fmt.Println("READING FROM CACHE")
-	return getPokemonFromCache(cached)
+	return getPokemon(config, url)
 }
 
-func GetPokemonByName(config *Config, name string) (Pokemon, error) {
+func GetPokemonDetails(config *Config, name string) (Pokemon, error) {
 	if name == "" {
 		return Pokemon{}, fmt.Errorf("Please provide a name of the Pokemon")
 	}
 	url := pokemonURL + "/" + name + "/"
+	cached, ok := config.Cache.Get(url)
+	if ok {
+		fmt.Println("READING FROM CACHE")
+		return getPokemonDetailsCached(cached)
+
+	}
+	return getPokemonDetails(config, url)
+
+}
+
+func getPokemonDetails(config *Config, url string) (Pokemon, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return Pokemon{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Pokemon{}, err
+	}
+
+	config.Cache.Add(url, body)
+	var pokemon Pokemon
+	err = json.Unmarshal(body, &pokemon)
+	if err != nil {
+		return Pokemon{}, err
+	}
+
+	return pokemon, nil
+
+}
+
+func getPokemonDetailsCached(cached []byte) (Pokemon, error) {
+	var pokemon Pokemon
+	err := json.Unmarshal(cached, &pokemon)
+	if err != nil {
+		return Pokemon{}, fmt.Errorf("Error while reading cache: %v\n", err)
+	}
+
+	return pokemon, nil
 
 }
